@@ -23,51 +23,57 @@ class FirebaseAuthRest {
   static const _signUp =
       'https://identitytoolkit.googleapis.com/v1/accounts:signUp';
 
-  /// Tries password sign-in; on `EMAIL_NOT_FOUND` or
-  /// `INVALID_LOGIN_CREDENTIALS`, falls through to sign-up.
-  static Future<FirebaseAuthResult> signInOrSignUp(
+  /// Creates a new Firebase account. Throws a friendly message if the email is
+  /// already registered or the password is too weak.
+  static Future<FirebaseAuthResult> signUp(String email, String password) =>
+      _authenticate(_signUp, email, password);
+
+  /// Signs in an existing Firebase account. Throws a friendly message on bad
+  /// credentials.
+  static Future<FirebaseAuthResult> signIn(String email, String password) =>
+      _authenticate(_signIn, email, password);
+
+  static Future<FirebaseAuthResult> _authenticate(
+    String endpoint,
     String email,
     String password,
   ) async {
-    final body = jsonEncode({
-      'email': email,
-      'password': password,
-      'returnSecureToken': true,
-    });
-    const headers = {'content-type': 'application/json'};
-
-    final signIn = await http.post(
-      Uri.parse('$_signIn?key=${AppConfig.firebaseApiKey}'),
-      headers: headers,
-      body: body,
+    final resp = await http.post(
+      Uri.parse('$endpoint?key=${AppConfig.firebaseApiKey}'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({
+        'email': email,
+        'password': password,
+        'returnSecureToken': true,
+      }),
     );
-    if (signIn.statusCode == 200) {
-      final token = (jsonDecode(signIn.body) as Map)['idToken'] as String?;
+    if (resp.statusCode == 200) {
+      final token = (jsonDecode(resp.body) as Map)['idToken'] as String?;
       if (token != null) return FirebaseAuthResult(idToken: token, email: email);
     }
+    throw FirebaseAuthException(_friendly(resp.statusCode, _err(resp.body)));
+  }
 
-    final signInError = _err(signIn.body);
-    final signInUnrecoverable = signIn.statusCode != 400 ||
-        !(signInError.contains('EMAIL_NOT_FOUND') ||
-            signInError.contains('INVALID_LOGIN_CREDENTIALS'));
-    if (signInUnrecoverable) {
-      throw FirebaseAuthException(
-        'sign-in failed (${signIn.statusCode}): $signInError',
-      );
+  /// Maps Firebase Identity Toolkit error codes to user-facing copy.
+  static String _friendly(int status, String code) {
+    if (code.contains('EMAIL_EXISTS')) {
+      return 'An account with that email already exists — switch to Sign In.';
     }
-
-    final signUp = await http.post(
-      Uri.parse('$_signUp?key=${AppConfig.firebaseApiKey}'),
-      headers: headers,
-      body: body,
-    );
-    if (signUp.statusCode == 200) {
-      final token = (jsonDecode(signUp.body) as Map)['idToken'] as String?;
-      if (token != null) return FirebaseAuthResult(idToken: token, email: email);
+    if (code.contains('EMAIL_NOT_FOUND') ||
+        code.contains('INVALID_LOGIN_CREDENTIALS') ||
+        code.contains('INVALID_PASSWORD')) {
+      return 'Invalid email or password.';
     }
-    throw FirebaseAuthException(
-      'sign-up failed (${signUp.statusCode}): ${_err(signUp.body)}',
-    );
+    if (code.contains('WEAK_PASSWORD')) {
+      return 'Password is too weak — use at least 6 characters.';
+    }
+    if (code.contains('INVALID_EMAIL')) {
+      return 'That email address is not valid.';
+    }
+    if (code.contains('TOO_MANY_ATTEMPTS')) {
+      return 'Too many attempts — please wait a moment and try again.';
+    }
+    return 'Authentication failed ($status): $code';
   }
 
   static String _err(String body) {
