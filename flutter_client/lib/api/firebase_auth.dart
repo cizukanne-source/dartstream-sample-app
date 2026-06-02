@@ -17,6 +17,22 @@ class FirebaseAuthException implements Exception {
   String toString() => 'FirebaseAuthException: $message';
 }
 
+/// Client-side Firebase auth via Google's Identity Toolkit REST API.
+///
+/// This is intentionally NOT the `firebase_dart_admin_auth_sdk` that the
+/// DartStream backend uses. That package is a *server-side admin* SDK: it
+/// imports `dart:io` (so it can't compile for Flutter web), does not list Web
+/// as a supported platform, and is initialized with privileged workload
+/// identity / service-account credentials that must never ship in a browser.
+/// In DartStream's architecture it lives in `ds-auth` as the token *verifier*.
+///
+/// A browser client plays the *user* role: it signs in against Identity
+/// Toolkit (`signInWithPassword` / `signUp`) with the public web API key to
+/// obtain a real Firebase ID token, then hands that token to the backend —
+/// which verifies it with the admin SDK. The official Firebase web SDK
+/// (FlutterFire `firebase_auth`) calls these exact same endpoints under the
+/// hood, so this lightweight REST path is functionally equivalent with zero
+/// extra dependencies, and produces an identical, backend-trusted ID token.
 class FirebaseAuthRest {
   static const _signIn =
       'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword';

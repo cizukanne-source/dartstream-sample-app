@@ -14,6 +14,21 @@ Authentication goes straight to Firebase Identity Toolkit (REST) using the
 project's **web** API key; the resulting ID token is then exchanged with the
 DartStream backend.
 
+### Why REST and not `firebase_dart_admin_auth_sdk`?
+
+DartStream's backend uses [`firebase_dart_admin_auth_sdk`](https://pub.dev/packages/firebase_dart_admin_auth_sdk)
+to **verify** ID tokens server-side. That package is a *server/admin* SDK — it
+imports `dart:io` (so it can't build for Flutter web), doesn't support the Web
+platform, and is initialized with privileged workload-identity / service-account
+credentials that must never live in a browser.
+
+This sample plays the **user/client** role, so it authenticates the way a real
+user does: it gets a Firebase ID token from Identity Toolkit (the exact
+endpoints the official Firebase web SDK / FlutterFire calls under the hood),
+then hands that token to the backend for verification. The token is identical
+and backend-trusted either way — the REST path just avoids extra dependencies.
+See `flutter_client/lib/api/firebase_auth.dart`.
+
 ## Prerequisites
 
 - Dart SDK `^3.6` (Flutter `3.44+` bundles a compatible SDK)
