@@ -6,11 +6,16 @@ experience, and reactive services. It exists to exercise DartStream the way an
 actual client does — not with mocks — so regressions in the deployed contracts
 show up immediately.
 
-It ships two artifacts:
+It ships three artifacts:
 
 1. **`bin/smoke.dart`** — a headless Dart CLI that hits all 10 endpoints and
    prints `PASS/FAIL`. Run this first to confirm the environment is healthy.
-2. **`flutter_client/`** — a Flutter **web** app with a
+2. **`bin/auth_deepdive.dart`** — a headless Dart CLI that goes deep on the
+   `ds-auth` service alone, exercising **every** auth endpoint (auth, users
+   CRUD, sessions, avatar, status transitions, federated routes, providers) and
+   printing a `PASS/FAIL/SKIP` table. Use it to verify the full auth surface,
+   not just the happy path.
+3. **`flutter_client/`** — a Flutter **web** app with a
    [Flame](https://flame-engine.org) "tap-to-score" minigame, a real
    Create-Account / Sign-In flow, and a live response panel per DartStream
    service.
@@ -25,6 +30,7 @@ It ships two artifacts:
 - [Prerequisites](#prerequisites)
 - [Configuration & secrets](#configuration--secrets)
 - [Running the smoke CLI](#running-the-smoke-cli)
+- [Running the auth deep-dive](#running-the-auth-deep-dive)
 - [Running the Flutter + Flame client](#running-the-flutter--flame-client)
 - [Endpoint contracts](#endpoint-contracts)
 - [Verified end-to-end](#verified-end-to-end)
@@ -98,7 +104,8 @@ configured against: **`dartstream-prod`**.
 
 ```
 .
-├── bin/smoke.dart              # headless E2E CLI (pure Dart + http)
+├── bin/smoke.dart              # headless E2E CLI across all 5 services
+├── bin/auth_deepdive.dart      # headless deep-dive across the full ds-auth surface
 ├── .env.example                # config template (placeholders only)
 ├── flutter_client/
 │   └── lib/
@@ -173,6 +180,44 @@ dart run bin/smoke.dart
 It signs in with `TEST_EMAIL` (auto-signs-up on first run), then walks the 10
 contracts below, printing `PASS/FAIL` with HTTP status and a body excerpt so you
 can see exactly which contract behaves.
+
+---
+
+## Running the auth deep-dive
+
+Where `smoke.dart` proves the happy path across all five services,
+`auth_deepdive.dart` fans out across the **entire `ds-auth` surface** so you can
+see exactly which auth features work:
+
+```sh
+dart pub get
+set -a && source .env && set +a
+dart run bin/auth_deepdive.dart
+```
+
+It signs in, onboards via `signup`, then exercises:
+
+- **auth** — `login`, `logout`, `me`, `user-status`
+- **federated** — `signin/google`, `signin/github`, `signin/microsoft`
+- **users** — list, get, update, sessions, avatar (upload/get/delete), and the
+  reversible `suspend` / `activate` / `deactivate` transitions
+- **providers** — `GET /api/v1/providers`
+
+…and prints a `PASS/FAIL/SKIP` summary table grouped by area.
+
+**Destructive ops are skipped by default.** `DELETE /users/<id>` and
+revoke-all-sessions are gated behind `DEEPDIVE_DESTRUCTIVE=1` so a normal run
+never bricks the shared test account:
+
+```sh
+DEEPDIVE_DESTRUCTIVE=1 dart run bin/auth_deepdive.dart
+```
+
+> **Note on auth providers:** DartStream's `AuthProviderType` enumerates 10
+> provider SDKs, but only **Firebase** is implemented today; the other nine
+> (Auth0, Cognito, Entra ID, Okta, Magic, Fingerprint, Transmit, Stytch, Ping)
+> are stubs. This deep-dive therefore proves the Firebase provider end-to-end;
+> the federated `signin/*` routes are Firebase-backed.
 
 ---
 
