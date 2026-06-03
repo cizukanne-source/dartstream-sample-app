@@ -21,10 +21,10 @@ It ships four artifacts:
    paths run as create → read → update → delete so they self-clean; outward ops
    (invitation emails, member-role changes) are gated behind
    `DEEPDIVE_DESTRUCTIVE=1`.
-4. **`flutter_client/`** — a Flutter **web** app with a
-   [Flame](https://flame-engine.org) "tap-to-score" minigame, a real
-   Create-Account / Sign-In flow, and a live response panel per DartStream
-   service.
+4. **`flutter_client/`** — a Flutter **web** app: a real Create-Account /
+   Sign-In flow, a screen per DartStream service, and **DartStream Dash**, a
+   [Flame](https://flame-engine.org) arcade game whose rules are driven by live
+   DartStream services (feature flags, inventory, cloud-save, reactive events).
 
 ---
 
@@ -129,7 +129,7 @@ configured against: **`dartstream-prod`**.
 │       ├── screens/
 │       │   ├── login_screen.dart    # Create Account / Sign In toggle
 │       │   └── home_screen.dart     # live service panels + game host
-│       └── game/tap_game.dart       # Flame tap-to-score minigame
+│       └── game/dartstream_dash.dart # Flame arcade game (flags/inventory/cloud-save driven)
 └── README.md
 ```
 
@@ -319,7 +319,7 @@ service** (NavigationRail on wide screens, a Drawer on narrow):
 
 | Screen | Surface | What you can do |
 | --- | --- | --- |
-| **Overview** | experience | the Flame "tap-to-score" game + live panels; tapping the coin debounce-writes `cloud-save/snapshot` (500 ms) and posts a `reactive/events/log` milestone every 10th tap |
+| **Overview** | all | **DartStream Dash** — a Flame arcade game (catch coins, dodge bombs) whose rules come from DartStream: feature flags `double_score`/`hard_mode`/`extra_life` change play, inventory `starter-sword` grants the bomb-clear ability, cloud-save persists & resumes high score / lifetime coins, and every beat (start, level-up, hit, game-over) posts a `reactive/events/log` event |
 | **Profile** | auth | the user record + editable display name, the avatar lifecycle (set / view / remove), and session management (revoke one / all) |
 | **Feature flags** | platform | list / create / toggle / delete feature flags |
 | **Experience** | experience | profile, inventory, active sessions, connector catalog |

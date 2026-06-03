@@ -4,7 +4,7 @@ import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
 import '../api/dartstream.dart';
-import '../game/tap_game.dart';
+import '../game/dartstream_dash.dart';
 import '../state/session.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -20,7 +20,7 @@ enum _SaveStatus { idle, saving, saved, error }
 class _HomeScreenState extends State<HomeScreen> {
   static const _slotKey = 'flame';
 
-  late TapToScoreGame _game;
+  late DartstreamDashGame _game;
   bool _loading = true;
   Object? _bootstrapError;
 
@@ -31,7 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _lastEvent = '—';
   _SaveStatus _saveStatus = _SaveStatus.idle;
   Timer? _saveDebounce;
-  int _initialScore = 0;
+  String _resumeSummary = 'new game';
 
   DartstreamApi get _api => widget.session.api!;
   String get _userId => widget.session.userId!;
@@ -77,17 +77,17 @@ class _HomeScreenState extends State<HomeScreen> {
       final items =
           (inventoryList?['items'] is List) ? inventoryList!['items'] as List : const [];
 
-      final score = (snapshot?['snapshot'] is Map &&
-              (snapshot!['snapshot'] as Map)['payload'] is Map &&
-              ((snapshot['snapshot'] as Map)['payload'] as Map)['score'] is int)
-          ? ((snapshot['snapshot'] as Map)['payload'] as Map)['score'] as int
-          : 0;
-
-      _initialScore = score;
-      _game = TapToScoreGame(
-        initialScore: score,
-        onScore: _onScore,
-        onMilestone: _onMilestone,
+      final payload = (snapshot?['snapshot'] is Map &&
+              (snapshot!['snapshot'] as Map)['payload'] is Map)
+          ? (snapshot['snapshot'] as Map)['payload'] as Map
+          : const {};
+      final config = _buildConfig(flagsList, items, payload, profile);
+      _resumeSummary = 'high ${config.resumeHighScore} · '
+          'coins ${config.resumeLifetimeCoins}';
+      _game = DartstreamDashGame(
+        config: config,
+        onSnapshot: _onSnapshot,
+        onEvent: _onEvent,
       );
       setState(() {
         _profile = profile;
@@ -104,7 +104,47 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _onScore(int score) {
+  /// Maps live feature flags + inventory + a cloud-save snapshot into the
+  /// gameplay config — this is where DartStream services drive the game.
+  DashConfig _buildConfig(
+    List<dynamic> flags,
+    List<dynamic> inventory,
+    Map payload,
+    Map<String, dynamic> profile,
+  ) {
+    final enabled = <String>{};
+    for (final f in flags) {
+      if (f is Map && (f['enabled'] == true || f['status'] == 'active')) {
+        final key = (f['key'] ?? f['flag_key'] ?? f['flagKey'] ?? '').toString();
+        if (key.isNotEmpty) enabled.add(key);
+      }
+    }
+    int swordCharges = 0;
+    for (final item in inventory) {
+      if (item is Map &&
+          (item['itemId'] ?? item['id']) == 'starter-sword') {
+        final qty = item['quantity'];
+        swordCharges = (qty is int && qty > 0) ? qty.clamp(1, 3) : 1;
+      }
+    }
+    final p = (profile['profile'] is Map) ? profile['profile'] as Map : profile;
+    final name =
+        (p['displayName'] ?? p['display_name'] ?? 'Player').toString();
+    int asInt(Object? v) => v is int ? v : 0;
+
+    return DashConfig(
+      startLives: enabled.contains('extra_life') ? 4 : 3,
+      doubleScore: enabled.contains('double_score'),
+      hardMode: enabled.contains('hard_mode'),
+      swordCharges: swordCharges,
+      resumeHighScore: asInt(payload['highScore']),
+      resumeLifetimeCoins: asInt(payload['lifetimeCoins']),
+      playerName: name,
+    );
+  }
+
+  /// Debounced cloud-save of the full game state (called by the game).
+  void _onSnapshot(Map<String, dynamic> snapshot) {
     _saveDebounce?.cancel();
     setState(() => _saveStatus = _SaveStatus.saving);
     _saveDebounce = Timer(const Duration(milliseconds: 500), () async {
@@ -113,10 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
           userId: _userId,
           tenantId: _tenantId,
           slotKey: _slotKey,
-          payload: {
-            'score': score,
-            'savedAt': DateTime.now().toUtc().toIso8601String(),
-          },
+          payload: snapshot,
         );
         if (mounted) setState(() => _saveStatus = _SaveStatus.saved);
       } catch (_) {
@@ -125,19 +162,17 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _onMilestone(int score) async {
+  /// Reactive event log (called by the game on start/level-up/hit/over/etc.).
+  Future<void> _onEvent(String type, Map<String, dynamic> payload) async {
+    if (mounted) setState(() => _lastEvent = '$type @ ${_now()}');
     try {
       await _api.logEvent(
         tenantId: _tenantId,
-        eventType: 'flame.score.milestone',
-        payload: {'score': score, 'source': 'flutter-flame-client'},
+        eventType: type,
+        payload: {...payload, 'source': 'dartstream-dash'},
       );
-      if (mounted) {
-        setState(() =>
-            _lastEvent = 'flame.score.milestone score=$score @ ${_now()}');
-      }
     } catch (e) {
-      if (mounted) setState(() => _lastEvent = 'event error: $e');
+      if (mounted) setState(() => _lastEvent = '$type (log error: $e)');
     }
   }
 
@@ -210,11 +245,20 @@ class _HomeScreenState extends State<HomeScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _panel(
+          title: 'DartStream Dash — how to play',
+          child: const Text(
+            'Drag (or ←/→) to move, catch coins, dodge bombs. '
+            'Tap or Space uses the sword (from inventory) to clear bombs.\n\n'
+            'DartStream drives the rules: feature flags double_score / hard_mode '
+            '/ extra_life change gameplay; inventory grants the sword; cloud-save '
+            'persists & resumes your high score; every beat logs a reactive event.',
+          ),
+        ),
+        _panel(
           title: 'Cloud save',
           child: Text(
             switch (_saveStatus) {
-              _SaveStatus.idle =>
-                'Initial score loaded: $_initialScore (slot=$_slotKey)',
+              _SaveStatus.idle => 'Resumed: $_resumeSummary (slot=$_slotKey)',
               _SaveStatus.saving => 'Saving snapshot…',
               _SaveStatus.saved => 'Snapshot saved.',
               _SaveStatus.error => 'Snapshot save FAILED.',
