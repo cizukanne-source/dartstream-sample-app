@@ -332,6 +332,45 @@ class DartstreamApi {
     }
   }
 
+  // ---- Persistence: generic list / create / delete -------------------------
+  // subpath is relative to .../api/v1/persistence (e.g. '/database/').
+
+  Uri _persistenceUri(String subpath) =>
+      Uri.parse('${AppConfig.persistenceHost}/api/v1/persistence$subpath');
+
+  Future<List<dynamic>> persistenceList({
+    required String tenantId,
+    required String subpath,
+  }) async {
+    final resp = await http.get(_persistenceUri(subpath),
+        headers: _baseHeaders(tenantId: tenantId));
+    return _anyList(_jsonOrThrow(resp));
+  }
+
+  Future<Map<String, dynamic>> persistenceCreate({
+    required String tenantId,
+    required String subpath,
+    required Map<String, dynamic> body,
+  }) async {
+    final resp = await http.post(
+      _persistenceUri(subpath),
+      headers: _baseHeaders(tenantId: tenantId, json: true),
+      body: jsonEncode(body),
+    );
+    return _jsonOrThrow(resp);
+  }
+
+  Future<void> persistenceDelete({
+    required String tenantId,
+    required String subpath,
+  }) async {
+    final resp = await http.delete(_persistenceUri(subpath),
+        headers: _baseHeaders(tenantId: tenantId));
+    if (resp.statusCode != 200 && resp.statusCode != 204) {
+      throw DartstreamApiException(resp.statusCode, resp.body);
+    }
+  }
+
   /// Best-effort: pull the first list out of a tolerant response shape.
   List<dynamic> _anyList(Map<String, dynamic> j) {
     const keys = [

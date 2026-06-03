@@ -26,4 +26,5 @@ class AppConfig {
   static const platformHost = 'https://dev-apiplatform.dartstream.io';
   static const experienceHost = 'https://dev-apiexperience.dartstream.io';
   static const reactiveHost = 'https://dev-apireactive.dartstream.io';
+  static const persistenceHost = 'https://dev-apipersistence.dartstream.io';
 }

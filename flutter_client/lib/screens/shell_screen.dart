@@ -4,6 +4,7 @@ import '../state/session.dart';
 import 'experience_screen.dart';
 import 'feature_flags_screen.dart';
 import 'home_screen.dart';
+import 'persistence_screen.dart';
 import 'reactive_screen.dart';
 
 /// Post-login shell: owns the AppBar + sign-out and switches between a screen
@@ -44,6 +45,12 @@ class _ShellScreenState extends State<ShellScreen> {
       icon: Icons.bolt_outlined,
       selectedIcon: Icons.bolt,
       builder: () => ReactiveScreen(session: widget.session),
+    ),
+    _Feature(
+      label: 'Persistence',
+      icon: Icons.storage_outlined,
+      selectedIcon: Icons.storage,
+      builder: () => PersistenceScreen(session: widget.session),
     ),
   ];
 
