@@ -5,6 +5,7 @@ import 'experience_screen.dart';
 import 'feature_flags_screen.dart';
 import 'home_screen.dart';
 import 'persistence_screen.dart';
+import 'profile_screen.dart';
 import 'reactive_screen.dart';
 
 /// Post-login shell: owns the AppBar + sign-out and switches between a screen
@@ -27,6 +28,12 @@ class _ShellScreenState extends State<ShellScreen> {
       icon: Icons.sports_esports_outlined,
       selectedIcon: Icons.sports_esports,
       builder: () => HomeScreen(session: widget.session),
+    ),
+    _Feature(
+      label: 'Profile',
+      icon: Icons.account_circle_outlined,
+      selectedIcon: Icons.account_circle,
+      builder: () => ProfileScreen(session: widget.session),
     ),
     _Feature(
       label: 'Feature flags',

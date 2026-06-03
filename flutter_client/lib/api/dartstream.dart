@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -93,6 +94,115 @@ class DartstreamApi {
       headers: _baseHeaders(),
     );
     return _jsonOrThrow(resp);
+  }
+
+  // ---- Auth: user record, sessions, avatar (ds-auth /users) ----------------
+
+  Future<Map<String, dynamic>> getUser({
+    required String userId,
+    required String tenantId,
+  }) async {
+    final resp = await http.get(
+      Uri.parse('${AppConfig.authHost}/api/v1/users/$userId'),
+      headers: _baseHeaders(tenantId: tenantId),
+    );
+    return _jsonOrThrow(resp);
+  }
+
+  Future<Map<String, dynamic>> updateUser({
+    required String userId,
+    required String tenantId,
+    required Map<String, dynamic> changes,
+  }) async {
+    final resp = await http.put(
+      Uri.parse('${AppConfig.authHost}/api/v1/users/$userId'),
+      headers: _baseHeaders(tenantId: tenantId, json: true),
+      body: jsonEncode(changes),
+    );
+    return _jsonOrThrow(resp);
+  }
+
+  Future<List<dynamic>> userSessions({
+    required String userId,
+    required String tenantId,
+  }) async {
+    final resp = await http.get(
+      Uri.parse('${AppConfig.authHost}/api/v1/users/$userId/sessions'),
+      headers: _baseHeaders(tenantId: tenantId),
+    );
+    return _anyList(_jsonOrThrow(resp));
+  }
+
+  Future<void> revokeSession({
+    required String userId,
+    required String tenantId,
+    required String sessionId,
+  }) async {
+    final resp = await http.delete(
+      Uri.parse('${AppConfig.authHost}/api/v1/users/$userId/sessions/$sessionId'),
+      headers: _baseHeaders(tenantId: tenantId),
+    );
+    if (resp.statusCode != 200 && resp.statusCode != 204) {
+      throw DartstreamApiException(resp.statusCode, resp.body);
+    }
+  }
+
+  Future<void> revokeAllSessions({
+    required String userId,
+    required String tenantId,
+  }) async {
+    final resp = await http.delete(
+      Uri.parse('${AppConfig.authHost}/api/v1/users/$userId/sessions'),
+      headers: _baseHeaders(tenantId: tenantId),
+    );
+    if (resp.statusCode != 200 && resp.statusCode != 204) {
+      throw DartstreamApiException(resp.statusCode, resp.body);
+    }
+  }
+
+  /// Avatar bytes for rendering; null when none is set (404).
+  Future<Uint8List?> avatarBytes({
+    required String userId,
+    required String tenantId,
+  }) async {
+    final resp = await http.get(
+      Uri.parse('${AppConfig.authHost}/api/v1/users/$userId/avatar'),
+      headers: _baseHeaders(tenantId: tenantId),
+    );
+    if (resp.statusCode == 404) return null;
+    if (resp.statusCode != 200) {
+      throw DartstreamApiException(resp.statusCode, resp.body);
+    }
+    return resp.bodyBytes;
+  }
+
+  Future<void> uploadAvatar({
+    required String userId,
+    required String tenantId,
+    required String imageDataUrl,
+    required String contentType,
+  }) async {
+    final resp = await http.post(
+      Uri.parse('${AppConfig.authHost}/api/v1/users/$userId/avatar'),
+      headers: _baseHeaders(tenantId: tenantId, json: true),
+      body: jsonEncode({'image': imageDataUrl, 'contentType': contentType}),
+    );
+    if (resp.statusCode != 200 && resp.statusCode != 201) {
+      throw DartstreamApiException(resp.statusCode, resp.body);
+    }
+  }
+
+  Future<void> deleteAvatar({
+    required String userId,
+    required String tenantId,
+  }) async {
+    final resp = await http.delete(
+      Uri.parse('${AppConfig.authHost}/api/v1/users/$userId/avatar'),
+      headers: _baseHeaders(tenantId: tenantId),
+    );
+    if (resp.statusCode != 200 && resp.statusCode != 204) {
+      throw DartstreamApiException(resp.statusCode, resp.body);
+    }
   }
 
   Future<Map<String, dynamic>> featureFlags({required String tenantId}) async {
