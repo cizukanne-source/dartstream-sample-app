@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/dartstream.dart';
 import '../state/session.dart';
+import '../widgets/resource_crud_section.dart';
 
 /// Live demo of ds-persistence: database connections, storage configs, logging
 /// configs (all CRUD), plus a logging-entries panel (create / list / clear).
@@ -10,31 +11,52 @@ class PersistenceScreen extends StatelessWidget {
   const PersistenceScreen({super.key, required this.session});
   final Session session;
 
+  ResourceCrudSection _crud({
+    required String title,
+    required String inputLabel,
+    required String path,
+    required Map<String, dynamic> Function(String) body,
+    required String Function(Map) titleOf,
+  }) {
+    final s = session;
+    return ResourceCrudSection(
+      title: title,
+      inputLabel: inputLabel,
+      titleOf: titleOf,
+      fetch: () => s.api!.persistenceList(tenantId: s.tenantId!, subpath: path),
+      onCreate: (v) async => s.api!
+          .persistenceCreate(tenantId: s.tenantId!, subpath: path, body: body(v)),
+      onDelete: (item) => s.api!.persistenceDelete(
+          tenantId: s.tenantId!,
+          // path may carry a trailing slash (e.g. '/database/'); avoid '//'.
+          subpath: path.endsWith('/')
+              ? '$path${item['id']}'
+              : '$path/${item['id']}'),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _PersCrud(
-          session: session,
+        _crud(
           title: 'Database connections',
           inputLabel: 'name',
-          subpath: '/database/',
-          createBody: (v) => {
+          path: '/database/',
+          body: (v) => {
             'name': v,
             'provider_type': 'postgres',
             'config': {'host': 'localhost', 'database': 'demo'},
           },
-          deletePath: (id) => '/database/$id',
           titleOf: (m) =>
               '${m['name'] ?? m['id']}  (${m['provider_type'] ?? m['providerType'] ?? '?'})',
         ),
-        _PersCrud(
-          session: session,
+        _crud(
           title: 'Storage configs',
           inputLabel: 'bucket_name',
-          subpath: '/storage/configs',
-          createBody: (v) => {
+          path: '/storage/configs',
+          body: (v) => {
             'bucket_name': v,
             'provider_type': 'gcs',
             'config': {
@@ -43,186 +65,21 @@ class PersistenceScreen extends StatelessWidget {
                   '{"type":"service_account","project_id":"demo"}',
             },
           },
-          deletePath: (id) => '/storage/configs/$id',
           titleOf: (m) => (m['bucket_name'] ?? m['bucketName'] ?? m['id']).toString(),
         ),
-        _PersCrud(
-          session: session,
+        _crud(
           title: 'Logging configs',
           inputLabel: 'provider_type (gcpLogging / datadog / newRelic)',
-          subpath: '/logging/configs',
-          createBody: (v) => {
+          path: '/logging/configs',
+          body: (v) => {
             'provider_type': v.isEmpty ? 'gcpLogging' : v,
             'config': {},
             'enabled': true,
           },
-          deletePath: (id) => '/logging/configs/$id',
           titleOf: (m) => (m['provider_type'] ?? m['providerType'] ?? m['id']).toString(),
         ),
         _LoggingEntriesPanel(session: session),
       ],
-    );
-  }
-}
-
-/// list + create + delete panel for a persistence resource.
-class _PersCrud extends StatefulWidget {
-  const _PersCrud({
-    required this.session,
-    required this.title,
-    required this.inputLabel,
-    required this.subpath,
-    required this.createBody,
-    required this.deletePath,
-    required this.titleOf,
-  });
-
-  final Session session;
-  final String title;
-  final String inputLabel;
-  final String subpath;
-  final Map<String, dynamic> Function(String input) createBody;
-  final String Function(String id) deletePath;
-  final String Function(Map item) titleOf;
-
-  @override
-  State<_PersCrud> createState() => _PersCrudState();
-}
-
-class _PersCrudState extends State<_PersCrud> {
-  DartstreamApi get _api => widget.session.api!;
-  String get _tenantId => widget.session.tenantId!;
-
-  bool _loading = true;
-  bool _busy = false;
-  List<dynamic> _items = const [];
-  final _input = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _input.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    try {
-      final items =
-          await _api.persistenceList(tenantId: _tenantId, subpath: widget.subpath);
-      if (mounted) {
-        setState(() {
-          _items = items;
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _loading = false);
-        _snack(context, '${widget.title}: load failed — $e', error: true);
-      }
-    }
-  }
-
-  Future<void> _create() async {
-    final v = _input.text.trim();
-    setState(() => _busy = true);
-    try {
-      await _api.persistenceCreate(
-        tenantId: _tenantId,
-        subpath: widget.subpath,
-        body: widget.createBody(v),
-      );
-      _input.clear();
-      if (mounted) _snack(context, '${widget.title}: created.');
-      await _load();
-    } catch (e) {
-      if (mounted) _snack(context, '${widget.title}: create failed — $e', error: true);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _delete(Map item) async {
-    final id = (item['id'] ?? '').toString();
-    if (id.isEmpty) {
-      _snack(context, '${widget.title}: item has no id.', error: true);
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      await _api.persistenceDelete(
-          tenantId: _tenantId, subpath: widget.deletePath(id));
-      if (mounted) _snack(context, '${widget.title}: deleted.');
-      await _load();
-    } catch (e) {
-      if (mounted) _snack(context, '${widget.title}: delete failed — $e', error: true);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${widget.title} (${_items.length})',
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _input,
-                    enabled: !_busy,
-                    decoration: InputDecoration(
-                      labelText: widget.inputLabel,
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    onSubmitted: (_) => _create(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _busy ? null : _create,
-                  child: const Text('Add'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(8),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_items.isEmpty)
-              const Text('(none)')
-            else
-              for (final item in _items)
-                if (item is Map)
-                  ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(widget.titleOf(item)),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: _busy ? null : () => _delete(item),
-                    ),
-                  ),
-          ],
-        ),
-      ),
     );
   }
 }

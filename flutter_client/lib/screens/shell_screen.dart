@@ -65,6 +65,10 @@ class _ShellScreenState extends State<ShellScreen> {
   Widget build(BuildContext context) {
     final session = widget.session;
     final wide = MediaQuery.sizeOf(context).width >= 760;
+    // A bottom NavigationBar is only comfortable up to ~5 destinations; beyond
+    // that (or on wide screens) use a rail/drawer instead.
+    final useBottomBar = !wide && _features.length <= 5;
+    final useDrawer = !wide && _features.length > 5;
 
     final body = IndexedStack(
       index: _index,
@@ -87,6 +91,28 @@ class _ShellScreenState extends State<ShellScreen> {
           ),
         ],
       ),
+      drawer: useDrawer
+          ? Drawer(
+              child: SafeArea(
+                child: ListView(
+                  children: [
+                    for (var i = 0; i < _features.length; i++)
+                      ListTile(
+                        leading: Icon(i == _index
+                            ? _features[i].selectedIcon
+                            : _features[i].icon),
+                        title: Text(_features[i].label),
+                        selected: i == _index,
+                        onTap: () {
+                          setState(() => _index = i);
+                          Navigator.pop(context);
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            )
+          : null,
       body: wide
           ? Row(
               children: [
@@ -108,9 +134,8 @@ class _ShellScreenState extends State<ShellScreen> {
               ],
             )
           : body,
-      bottomNavigationBar: wide
-          ? null
-          : NavigationBar(
+      bottomNavigationBar: useBottomBar
+          ? NavigationBar(
               selectedIndex: _index,
               onDestinationSelected: (i) => setState(() => _index = i),
               destinations: [
@@ -121,7 +146,8 @@ class _ShellScreenState extends State<ShellScreen> {
                     label: f.label,
                   ),
               ],
-            ),
+            )
+          : null,
     );
   }
 }

@@ -154,6 +154,13 @@ void main(List<String> args) async {
     );
   });
 
+  await _step('GET  /api/v1/persistence/database', () async {
+    return http.get(
+      Uri.parse('${hosts.persistence}/api/v1/persistence/database/'),
+      headers: authHeaders,
+    );
+  });
+
   _summary();
   exit(_fails == 0 ? 0 : 1);
 }
