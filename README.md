@@ -6,7 +6,7 @@ experience, and reactive services. It exists to exercise DartStream the way an
 actual client does — not with mocks — so regressions in the deployed contracts
 show up immediately.
 
-It ships three artifacts:
+It ships four artifacts:
 
 1. **`bin/smoke.dart`** — a headless Dart CLI that hits all 10 endpoints and
    prints `PASS/FAIL`. Run this first to confirm the environment is healthy.
@@ -15,7 +15,13 @@ It ships three artifacts:
    CRUD, sessions, avatar, status transitions, federated routes, providers) and
    printing a `PASS/FAIL/SKIP` table. Use it to verify the full auth surface,
    not just the happy path.
-3. **`flutter_client/`** — a Flutter **web** app with a
+3. **`bin/platform_deepdive.dart`** — the same idea for `ds-platform-services`:
+   feature-flags, projects (+ environments, integrations, orchestration),
+   api-keys, settings, team, and the middleware/discovery sub-services. CRUD
+   paths run as create → read → update → delete so they self-clean; outward ops
+   (invitation emails, member-role changes) are gated behind
+   `DEEPDIVE_DESTRUCTIVE=1`.
+4. **`flutter_client/`** — a Flutter **web** app with a
    [Flame](https://flame-engine.org) "tap-to-score" minigame, a real
    Create-Account / Sign-In flow, and a live response panel per DartStream
    service.
@@ -31,6 +37,7 @@ It ships three artifacts:
 - [Configuration & secrets](#configuration--secrets)
 - [Running the smoke CLI](#running-the-smoke-cli)
 - [Running the auth deep-dive](#running-the-auth-deep-dive)
+- [Running the platform deep-dive](#running-the-platform-deep-dive)
 - [Running the Flutter + Flame client](#running-the-flutter--flame-client)
 - [Endpoint contracts](#endpoint-contracts)
 - [Verified end-to-end](#verified-end-to-end)
@@ -106,6 +113,7 @@ configured against: **`dartstream-prod`**.
 .
 ├── bin/smoke.dart              # headless E2E CLI across all 5 services
 ├── bin/auth_deepdive.dart      # headless deep-dive across the full ds-auth surface
+├── bin/platform_deepdive.dart  # headless deep-dive across ds-platform-services
 ├── .env.example                # config template (placeholders only)
 ├── flutter_client/
 │   └── lib/
@@ -218,6 +226,29 @@ DEEPDIVE_DESTRUCTIVE=1 dart run bin/auth_deepdive.dart
 > (Auth0, Cognito, Entra ID, Okta, Magic, Fingerprint, Transmit, Stytch, Ping)
 > are stubs. This deep-dive therefore proves the Firebase provider end-to-end;
 > the federated `signin/*` routes are Firebase-backed.
+
+---
+
+## Running the platform deep-dive
+
+```sh
+dart pub get
+set -a && source .env && set +a
+dart run bin/platform_deepdive.dart
+```
+
+It bootstraps a tenant, then exercises `ds-platform-services` end to end:
+
+- **feature-flags** — list, create, get, update, delete
+- **projects** — list/create/get/update/archive, plus environments,
+  integrations, and orchestration provider resolution
+- **api-keys** — list, create, delete
+- **settings** — profile + notifications (get/patch)
+- **team** — members + invitations (reads); invite/role-change gated behind
+  `DEEPDIVE_DESTRUCTIVE=1` (they send email / mutate a real member)
+- **middleware** and **discovery** sub-services — full CRUD
+
+CRUD groups create-then-delete so a normal run leaves no clutter in the tenant.
 
 ---
 
