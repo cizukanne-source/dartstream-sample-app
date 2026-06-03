@@ -334,6 +334,27 @@ and the CRUD screens share one reusable widget
 > passes `userId`/`tenantId` as query params on experience calls. See the note
 > in [`dartstream.dart`](flutter_client/lib/api/dartstream.dart).
 
+### DartStream Dash (the Overview game)
+
+A small Flame arcade game ([`game/dartstream_dash.dart`](flutter_client/lib/game/dartstream_dash.dart))
+that exists to prove the experience/platform services drive real behaviour, not
+just panels. **Controls:** drag (or `←`/`→`) to move the ship, catch coins,
+dodge bombs; **tap or `Space`** uses the sword; on game over, tap / `R` to
+replay. Each service maps to a mechanic:
+
+| DartStream service | In-game effect |
+| --- | --- |
+| `platform/feature-flags` | a flag keyed **`double_score`** (enabled) → coins score 2×; **`hard_mode`** → faster spawns + more bombs; **`extra_life`** → start with 4 lives |
+| `experience/inventory` | owning **`starter-sword`** grants the bomb-clear ability (charges = item quantity) |
+| `experience/cloud-save` | the full game state is debounce-saved each coin/level/game-over and **resumed** (high score + lifetime coins) on next load |
+| `reactive/events/log` | every beat logs an event: `game.start`, `game.level.up`, `game.bomb.hit`, `game.sword.used`, `game.over` |
+| `experience/profiles/me` | player name shown in the HUD |
+
+**Try it:** in the **Feature flags** screen create a flag with key `double_score`
+(enabled), then hot-restart / re-enter the Overview — coins now score 20 instead
+of 10, and the HUD shows the active modifier. Flag config is read at game start,
+so apply a flag then restart the game to see it take effect.
+
 ---
 
 ## Smoke CLI coverage
