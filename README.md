@@ -111,10 +111,13 @@ configured against: **`dartstream-prod`**.
 
 ```
 .
-├── bin/smoke.dart              # headless E2E CLI across all 5 services
-├── bin/auth_deepdive.dart      # headless deep-dive across the full ds-auth surface
-├── bin/platform_deepdive.dart  # headless deep-dive across ds-platform-services
-├── .env.example                # config template (placeholders only)
+├── bin/smoke.dart                 # headless E2E CLI across all 5 services
+├── bin/auth_deepdive.dart         # deep-dive: full ds-auth surface
+├── bin/platform_deepdive.dart     # deep-dive: ds-platform-services
+├── bin/experience_deepdive.dart   # deep-dive: ds-experience-orchestration
+├── bin/reactive_deepdive.dart     # deep-dive: ds-reactive-dataflow
+├── bin/persistence_deepdive.dart  # deep-dive: ds-persistence
+├── .env.example                   # config template (placeholders only)
 ├── flutter_client/
 │   └── lib/
 │       ├── config.dart         # backend hosts; API key read from --dart-define
@@ -249,6 +252,25 @@ It bootstraps a tenant, then exercises `ds-platform-services` end to end:
 - **middleware** and **discovery** sub-services — full CRUD
 
 CRUD groups create-then-delete so a normal run leaves no clutter in the tenant.
+
+---
+
+## Running the experience / reactive / persistence deep-dives
+
+Same pattern, one per remaining service:
+
+```sh
+set -a && source .env && set +a
+dart run bin/experience_deepdive.dart    # profiles, cloud-save, inventory, sessions, connectors
+dart run bin/reactive_deepdive.dart      # events, streaming, notifications, lifecycle hooks
+dart run bin/persistence_deepdive.dart   # database connections, storage configs, logging
+```
+
+Each bootstraps a tenant, exercises every endpoint in its service, and prints a
+`PASS/FAIL/SKIP` table. CRUD groups self-clean. As of 2026-06-03: experience
+11/11 and reactive 29/29 are fully green; persistence has one known
+backend bug (logging-config save returns a non-persistent id on the upsert
+update path — filed as a SaaS ticket).
 
 ---
 
