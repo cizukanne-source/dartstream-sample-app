@@ -264,6 +264,94 @@ class DartstreamApi {
     return const [];
   }
 
+  // ---- Experience: sessions + connectors (read-only) ----------------------
+
+  Future<List<dynamic>> activeSessions({
+    required String userId,
+    required String tenantId,
+  }) async {
+    final resp = await http.get(
+      Uri.parse(
+        '${AppConfig.experienceHost}/api/v1/experience/sessions/active'
+        '?userId=${Uri.encodeQueryComponent(userId)}'
+        '&tenantId=${Uri.encodeQueryComponent(tenantId)}',
+      ),
+      headers: _baseHeaders(tenantId: tenantId),
+    );
+    final j = _jsonOrThrow(resp);
+    final s = j['sessions'];
+    if (s is Map && s['sessions'] is List) return s['sessions'] as List;
+    if (s is List) return s;
+    return _anyList(j);
+  }
+
+  Future<Map<String, dynamic>> connectors({required String tenantId}) async {
+    final resp = await http.get(
+      Uri.parse('${AppConfig.experienceHost}/api/v1/experience/connectors/'),
+      headers: _baseHeaders(tenantId: tenantId),
+    );
+    return _jsonOrThrow(resp);
+  }
+
+  // ---- Reactive: generic list / create / delete ----------------------------
+  // subpath is relative to .../api/v1/reactive (e.g. '/streaming/channels').
+
+  Uri _reactiveUri(String subpath) =>
+      Uri.parse('${AppConfig.reactiveHost}/api/v1/reactive$subpath');
+
+  Future<List<dynamic>> reactiveList({
+    required String tenantId,
+    required String subpath,
+  }) async {
+    final resp =
+        await http.get(_reactiveUri(subpath), headers: _baseHeaders(tenantId: tenantId));
+    return _anyList(_jsonOrThrow(resp));
+  }
+
+  Future<Map<String, dynamic>> reactiveCreate({
+    required String tenantId,
+    required String subpath,
+    required Map<String, dynamic> body,
+  }) async {
+    final resp = await http.post(
+      _reactiveUri(subpath),
+      headers: _baseHeaders(tenantId: tenantId, json: true),
+      body: jsonEncode(body),
+    );
+    return _jsonOrThrow(resp);
+  }
+
+  Future<void> reactiveDelete({
+    required String tenantId,
+    required String subpath,
+  }) async {
+    final resp = await http.delete(_reactiveUri(subpath),
+        headers: _baseHeaders(tenantId: tenantId));
+    if (resp.statusCode != 200 && resp.statusCode != 204) {
+      throw DartstreamApiException(resp.statusCode, resp.body);
+    }
+  }
+
+  /// Best-effort: pull the first list out of a tolerant response shape.
+  List<dynamic> _anyList(Map<String, dynamic> j) {
+    const keys = [
+      'data', 'channels', 'subscriptions', 'hooks', 'configs', 'events',
+      'items', 'logs', 'notifications', 'entries',
+    ];
+    for (final k in keys) {
+      if (j[k] is List) return j[k] as List;
+    }
+    for (final v in j.values) {
+      if (v is List) return v;
+      if (v is Map) {
+        for (final k in keys) {
+          if (v[k] is List) return v[k] as List;
+        }
+      }
+    }
+    return const [];
+  }
+
   Map<String, dynamic> _jsonOrThrow(http.Response resp) {
     if (resp.statusCode != 200 && resp.statusCode != 201) {
       throw DartstreamApiException(resp.statusCode, resp.body);

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../state/session.dart';
+import 'experience_screen.dart';
 import 'feature_flags_screen.dart';
 import 'home_screen.dart';
+import 'reactive_screen.dart';
 
 /// Post-login shell: owns the AppBar + sign-out and switches between a screen
 /// per DartStream feature. More feature screens (profile/sessions, inventory,
@@ -30,6 +32,18 @@ class _ShellScreenState extends State<ShellScreen> {
       icon: Icons.flag_outlined,
       selectedIcon: Icons.flag,
       builder: () => FeatureFlagsScreen(session: widget.session),
+    ),
+    _Feature(
+      label: 'Experience',
+      icon: Icons.dashboard_outlined,
+      selectedIcon: Icons.dashboard,
+      builder: () => ExperienceScreen(session: widget.session),
+    ),
+    _Feature(
+      label: 'Reactive',
+      icon: Icons.bolt_outlined,
+      selectedIcon: Icons.bolt,
+      builder: () => ReactiveScreen(session: widget.session),
     ),
   ];
 
