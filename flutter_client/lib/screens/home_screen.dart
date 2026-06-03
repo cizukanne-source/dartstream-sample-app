@@ -164,7 +164,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Reactive event log (called by the game on start/level-up/hit/over/etc.).
   Future<void> _onEvent(String type, Map<String, dynamic> payload) async {
-    if (mounted) setState(() => _lastEvent = '$type @ ${_now()}');
+    _setLastEvent('$type @ ${_now()}');
     try {
       await _api.logEvent(
         tenantId: _tenantId,
@@ -172,8 +172,17 @@ class _HomeScreenState extends State<HomeScreen> {
         payload: {...payload, 'source': 'dartstream-dash'},
       );
     } catch (e) {
-      if (mounted) setState(() => _lastEvent = '$type (log error: $e)');
+      _setLastEvent('$type (log error: $e)');
     }
+  }
+
+  /// The game emits `game.start` during the GameWidget's first build (onLoad),
+  /// so defer the rebuild to after the current frame to avoid setState-in-build.
+  void _setLastEvent(String value) {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _lastEvent = value);
+    });
   }
 
   String _now() => DateTime.now().toIso8601String().substring(11, 19);
@@ -229,7 +238,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Expanded(flex: 3, child: game),
                     const SizedBox(width: 16),
-                    SizedBox(width: 360, child: panels),
+                    SizedBox(
+                      width: 360,
+                      // Panels can exceed the viewport height; let them scroll.
+                      child: SingleChildScrollView(child: panels),
+                    ),
                   ],
                 )
               : ListView(
