@@ -38,10 +38,11 @@ It ships four artifacts:
 - [Running the smoke CLI](#running-the-smoke-cli)
 - [Running the auth deep-dive](#running-the-auth-deep-dive)
 - [Running the platform deep-dive](#running-the-platform-deep-dive)
+- [Running the experience / reactive / persistence deep-dives](#running-the-experience--reactive--persistence-deep-dives)
 - [Running the Flutter + Flame client](#running-the-flutter--flame-client)
-- [Endpoint contracts](#endpoint-contracts)
-- [Verified end-to-end](#verified-end-to-end)
-- [Known backend gaps](#known-backend-gaps)
+- [Smoke CLI coverage](#smoke-cli-coverage)
+- [Verified end-to-end](#verified-end-to-end-live-dartstream-prod-2026-06-03)
+- [Known backend gaps & filed bugs](#known-backend-gaps--filed-bugs)
 - [License](#license)
 
 ---
@@ -311,16 +312,23 @@ backend's `/api/v1/auth/signup` is **idempotent** — it returns the existing
 user for a returning login (with a `/api/v1/auth/login` fallback on 409) — so
 the same onboarding call covers both create-account and sign-in.
 
-### What the home screen does
+### What the client does
 
-After login it runs `profile`, `feature-flags`, `inventory`, `cloud-save`, and
-`streaming/channels` in parallel, renders a live response panel for each, then
-mounts the Flame game. Tapping the coin:
+After login the app is a **navigation shell with one screen per DartStream
+service** (NavigationRail on wide screens, a Drawer on narrow):
 
-- increments the score (Flame state),
-- debounce-writes `cloud-save/snapshot` (500 ms), and
-- on every 10th tap, posts `reactive/events/log` with
-  `event_type=flame.score.milestone`.
+| Screen | Surface | What you can do |
+| --- | --- | --- |
+| **Overview** | experience | the Flame "tap-to-score" game + live panels; tapping the coin debounce-writes `cloud-save/snapshot` (500 ms) and posts a `reactive/events/log` milestone every 10th tap |
+| **Profile** | auth | the user record + editable display name, the avatar lifecycle (set / view / remove), and session management (revoke one / all) |
+| **Feature flags** | platform | list / create / toggle / delete feature flags |
+| **Experience** | experience | profile, inventory, active sessions, connector catalog |
+| **Reactive** | reactive | log an event + the event log, and CRUD for subscriptions, streaming channels, notification configs, lifecycle hooks |
+| **Persistence** | persistence | CRUD for database connections, storage configs, logging configs + a logging-entries panel |
+
+Every screen surfaces backend errors in a SnackBar (it does not hide failures),
+and the CRUD screens share one reusable widget
+([`resource_crud_section.dart`](flutter_client/lib/widgets/resource_crud_section.dart)).
 
 > Browsers strip `X-User-ID` from the CORS preflight allowlist, so the client
 > passes `userId`/`tenantId` as query params on experience calls. See the note
@@ -328,41 +336,58 @@ mounts the Flame game. Tapping the coin:
 
 ---
 
-## Endpoint contracts
+## Smoke CLI coverage
+
+`smoke.dart` walks one representative contract per service (the deep-dive CLIs
+go far broader — see their sections above):
 
 | # | Method & path | Service | Notes |
 | --- | --- | --- | --- |
 | 1 | Firebase `signInWithPassword` / `signUp` | Identity Toolkit | yields the ID token |
 | 2 | `POST /api/v1/auth/signup` | auth | onboards user + tenant; idempotent |
 | 3 | `GET  /api/v1/auth/me` | auth | current user record |
-| 4 | `GET  /api/v1/platform/feature-flags` | platform | `{ "flags": [] }` today |
+| 4 | `GET  /api/v1/platform/feature-flags` | platform | `{ "flags": [] }` for a new tenant |
 | 5 | `GET  /api/v1/experience/profiles/me` | experience | `dartstream-managed` profile |
 | 6 | `POST /api/v1/experience/cloud-save/snapshot` | experience | write score (201) |
 | 7 | `GET  /api/v1/experience/cloud-save/snapshot` | experience | read back |
 | 8 | `GET  /api/v1/experience/inventory/items` | experience | seeded items |
 | 9 | `POST /api/v1/reactive/events/log` | reactive | `{ "status": "logged" }` |
 | 10 | `GET  /api/v1/reactive/streaming/channels` | reactive | REST channel list (`[]`) |
+| 11 | `GET  /api/v1/persistence/database` | persistence | tenant DB connections |
 
 ---
 
-## Verified end-to-end
+## Verified end-to-end (live `dartstream-prod`, 2026-06-03)
 
-- **Smoke CLI:** 10 / 10 PASS against live `dartstream-prod`.
-- **Create-account → sign-in round trip:** verified that a returning user
-  signing in resolves a session (userId + tenantId) — this confirmed the
-  backend signup is idempotent.
-- **Flutter client:** a real, human-created account
-  (`dartstreame2e@gmail.com`) signed up, signed in, scored in the game, and saw
-  live data in every panel — cloud-save writes, reactive milestone events,
-  profile, and inventory (`starter-sword ×1`, `coin ×250`).
+- **Smoke CLI:** 11 / 11 PASS across all five services.
+- **Per-service deep-dives:** auth full surface PASS; platform 34 / 36;
+  experience 11 / 11; reactive 29 / 29; persistence 18 / 1. The two failures are
+  filed backend bugs (below).
+- **Flutter client:** a real human account signed up, signed in, scored in the
+  game, managed flags, browsed experience/reactive/persistence, and edited the
+  profile/avatar — with live data in every screen.
 
 ---
 
-## Known backend gaps
+## Known backend gaps & filed bugs
 
-- No `leaderboard` endpoint yet (roadmap Phase 2); not tested.
-- Inventory exposes only `GET /items` — no write loop to test.
-- `streaming/channels` is REST-only; no WebSocket upgrade yet.
+Found by the deep-dives and filed for the backend QA agent (not sample-app
+issues):
+
+- **Feature-flag PATCH/DELETE → 500** (`ds-platform-services`): a single bind
+  param is compared against the `uuid` id and the `varchar` flag_key in the same
+  WHERE clause, so flags can be created/read but not updated or deleted. Fix:
+  `id::text = @flagId OR flag_key = @flagId`.
+- **Logging-config save returns a phantom id** (`ds-persistence`): the
+  `ON CONFLICT DO UPDATE` upsert returns the freshly-generated id instead of the
+  persisted row's id (no `RETURNING`), so a second save for the same provider
+  hands back an id that 404s. Fix: add `RETURNING *` and map the returned row.
+
+Other notes:
+
+- Of the 10 `AuthProviderType` SDKs, only **Firebase** is implemented today; the
+  other nine are stubs. The federated `signin/*` routes are Firebase-backed.
+- Inventory exposes only `GET /items`; `streaming/channels` is REST-only.
 
 ---
 
