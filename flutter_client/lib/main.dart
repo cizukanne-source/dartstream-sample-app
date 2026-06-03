@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/shell_screen.dart';
 import 'state/session.dart';
 
 void main() => runApp(const DartstreamApp());
@@ -37,7 +37,7 @@ class _DartstreamAppState extends State<DartstreamApp> {
         useMaterial3: true,
       ),
       home: _session.status == SessionStatus.signedIn
-          ? HomeScreen(session: _session)
+          ? ShellScreen(session: _session)
           : LoginScreen(session: _session),
     );
   }

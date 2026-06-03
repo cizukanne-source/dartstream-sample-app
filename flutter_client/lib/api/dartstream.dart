@@ -103,6 +103,69 @@ class DartstreamApi {
     return _jsonOrThrow(resp);
   }
 
+  // ---- Feature flag CRUD (ds-platform-services) ----------------------------
+
+  Future<List<dynamic>> listFeatureFlags({required String tenantId}) async {
+    final json = await featureFlags(tenantId: tenantId);
+    if (json['flags'] is List) return json['flags'] as List;
+    if (json['data'] is List) return json['data'] as List;
+    return const [];
+  }
+
+  Future<Map<String, dynamic>> createFeatureFlag({
+    required String tenantId,
+    required String key,
+    required String name,
+    String? description,
+    bool enabled = true,
+  }) async {
+    final resp = await http.post(
+      Uri.parse('${AppConfig.platformHost}/api/v1/platform/feature-flags'),
+      headers: _baseHeaders(tenantId: tenantId, json: true),
+      body: jsonEncode({
+        'key': key,
+        'name': name,
+        if (description != null && description.isNotEmpty)
+          'description': description,
+        'enabled': enabled,
+      }),
+    );
+    return _jsonOrThrow(resp);
+  }
+
+  /// Update a flag, addressed by its [flagKey] (matches the dashboard).
+  Future<Map<String, dynamic>> updateFeatureFlag({
+    required String tenantId,
+    required String flagKey,
+    required Map<String, dynamic> changes,
+  }) async {
+    final resp = await http.patch(
+      Uri.parse(
+        '${AppConfig.platformHost}/api/v1/platform/feature-flags/'
+        '${Uri.encodeComponent(flagKey)}',
+      ),
+      headers: _baseHeaders(tenantId: tenantId, json: true),
+      body: jsonEncode(changes),
+    );
+    return _jsonOrThrow(resp);
+  }
+
+  Future<void> deleteFeatureFlag({
+    required String tenantId,
+    required String flagKey,
+  }) async {
+    final resp = await http.delete(
+      Uri.parse(
+        '${AppConfig.platformHost}/api/v1/platform/feature-flags/'
+        '${Uri.encodeComponent(flagKey)}',
+      ),
+      headers: _baseHeaders(tenantId: tenantId),
+    );
+    if (resp.statusCode != 200 && resp.statusCode != 204) {
+      throw DartstreamApiException(resp.statusCode, resp.body);
+    }
+  }
+
   Future<Map<String, dynamic>> profile({
     required String userId,
     required String tenantId,

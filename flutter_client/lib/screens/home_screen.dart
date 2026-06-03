@@ -145,29 +145,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final session = widget.session;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('DartStream E2E Client'),
-        actions: [
-          if (session.email != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Center(child: Text(session.email!)),
-            ),
-          IconButton(
-            tooltip: 'Sign out',
-            icon: const Icon(Icons.logout),
-            onPressed: session.signOut,
-          ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _bootstrapError != null
-              ? _errorView()
-              : _layout(),
-    );
+    // The shell provides the Scaffold/AppBar; this screen renders body only.
+    return _loading
+        ? const Center(child: CircularProgressIndicator())
+        : _bootstrapError != null
+            ? _errorView()
+            : _layout();
   }
 
   Widget _errorView() => Center(
