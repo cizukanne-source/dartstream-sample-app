@@ -276,15 +276,33 @@ class DartstreamApi {
     }
   }
 
+  /// Project/environment scope suffix for experience calls. The backend defaults
+  /// to `default-app`/`development` when these are absent; passing them exercises
+  /// the project+environment scoping the SaaS gaming samples introduced, so each
+  /// app/environment gets an isolated profile, inventory, sessions and saves.
+  String _scope(String? projectId, String? environmentId) {
+    final b = StringBuffer();
+    if (projectId != null) {
+      b.write('&projectId=${Uri.encodeQueryComponent(projectId)}');
+    }
+    if (environmentId != null) {
+      b.write('&environmentId=${Uri.encodeQueryComponent(environmentId)}');
+    }
+    return b.toString();
+  }
+
   Future<Map<String, dynamic>> profile({
     required String userId,
     required String tenantId,
+    String? projectId,
+    String? environmentId,
   }) async {
     final resp = await http.get(
       Uri.parse(
         '${AppConfig.experienceHost}/api/v1/experience/profiles/me'
         '?userId=${Uri.encodeQueryComponent(userId)}'
-        '&tenantId=${Uri.encodeQueryComponent(tenantId)}',
+        '&tenantId=${Uri.encodeQueryComponent(tenantId)}'
+        '${_scope(projectId, environmentId)}',
       ),
       headers: _baseHeaders(tenantId: tenantId),
     );
@@ -294,12 +312,15 @@ class DartstreamApi {
   Future<Map<String, dynamic>> inventory({
     required String userId,
     required String tenantId,
+    String? projectId,
+    String? environmentId,
   }) async {
     final resp = await http.get(
       Uri.parse(
         '${AppConfig.experienceHost}/api/v1/experience/inventory/items'
         '?userId=${Uri.encodeQueryComponent(userId)}'
-        '&tenantId=${Uri.encodeQueryComponent(tenantId)}',
+        '&tenantId=${Uri.encodeQueryComponent(tenantId)}'
+        '${_scope(projectId, environmentId)}',
       ),
       headers: _baseHeaders(tenantId: tenantId),
     );
@@ -310,13 +331,16 @@ class DartstreamApi {
     required String userId,
     required String tenantId,
     String slotKey = 'flame',
+    String? projectId,
+    String? environmentId,
   }) async {
     final resp = await http.get(
       Uri.parse(
         '${AppConfig.experienceHost}/api/v1/experience/cloud-save/snapshot'
         '?userId=${Uri.encodeQueryComponent(userId)}'
         '&tenantId=${Uri.encodeQueryComponent(tenantId)}'
-        '&slotKey=${Uri.encodeQueryComponent(slotKey)}',
+        '&slotKey=${Uri.encodeQueryComponent(slotKey)}'
+        '${_scope(projectId, environmentId)}',
       ),
       headers: _baseHeaders(tenantId: tenantId),
     );
@@ -329,13 +353,16 @@ class DartstreamApi {
     required String tenantId,
     String slotKey = 'flame',
     required Map<String, dynamic> payload,
+    String? projectId,
+    String? environmentId,
   }) async {
     final resp = await http.post(
       Uri.parse(
         '${AppConfig.experienceHost}/api/v1/experience/cloud-save/snapshot'
         '?userId=${Uri.encodeQueryComponent(userId)}'
         '&tenantId=${Uri.encodeQueryComponent(tenantId)}'
-        '&slotKey=${Uri.encodeQueryComponent(slotKey)}',
+        '&slotKey=${Uri.encodeQueryComponent(slotKey)}'
+        '${_scope(projectId, environmentId)}',
       ),
       headers: _baseHeaders(tenantId: tenantId, json: true),
       body: jsonEncode({'payload': payload}),
@@ -379,12 +406,15 @@ class DartstreamApi {
   Future<List<dynamic>> activeSessions({
     required String userId,
     required String tenantId,
+    String? projectId,
+    String? environmentId,
   }) async {
     final resp = await http.get(
       Uri.parse(
         '${AppConfig.experienceHost}/api/v1/experience/sessions/active'
         '?userId=${Uri.encodeQueryComponent(userId)}'
-        '&tenantId=${Uri.encodeQueryComponent(tenantId)}',
+        '&tenantId=${Uri.encodeQueryComponent(tenantId)}'
+        '${_scope(projectId, environmentId)}',
       ),
       headers: _baseHeaders(tenantId: tenantId),
     );

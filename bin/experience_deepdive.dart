@@ -100,6 +100,14 @@ void main(List<String> args) async {
           Uri.parse('$base/cloud-save/snapshot?$q&slotKey=deepdive'),
           headers: h));
 
+  // ---- cloud-save: project/environment scoping (the SaaS gaming-sample delta) ----
+  // The experience modules now key storage by tenant/project/environment (the
+  // Unity/Flame samples pass projectId + environmentId). Prove the contract
+  // independently: a snapshot saved under one scope must read back within that
+  // scope (and survive a fresh read) but must NOT leak into a different
+  // environment or the legacy unscoped (default-app/development) slot.
+  await _scopingChecks(base, h, jh, q);
+
   // ---- inventory ----
   await _step('GET  /experience/inventory/capabilities', 'inventory',
       () => http.get(Uri.parse('$base/inventory/capabilities?$q'), headers: h));
@@ -121,6 +129,117 @@ void main(List<String> args) async {
 }
 
 // ---------------------------------------------------------------------------
+
+/// Exercises project/environment scoping on cloud-save. Saves a uniquely-tagged
+/// snapshot under one scope, then asserts isolation across environment + the
+/// legacy unscoped default, plus durability on a fresh re-read.
+Future<void> _scopingChecks(
+  String base,
+  Map<String, String> h,
+  Map<String, String> jh,
+  String q,
+) async {
+  const group = 'scoping';
+  const slot = 'scope-probe';
+  final nonce = 'dd-${DateTime.now().microsecondsSinceEpoch}';
+
+  String url(String? projectId, String? environmentId) {
+    final b = StringBuffer('$base/cloud-save/snapshot?$q&slotKey=$slot');
+    if (projectId != null) {
+      b.write('&projectId=${Uri.encodeQueryComponent(projectId)}');
+    }
+    if (environmentId != null) {
+      b.write('&environmentId=${Uri.encodeQueryComponent(environmentId)}');
+    }
+    return b.toString();
+  }
+
+  // Save the marker under scope A = (default-app / production).
+  await _step('POST cloud-save snapshot @ default-app/production', group, () {
+    return http.post(Uri.parse(url('default-app', 'production')),
+        headers: jh, body: jsonEncode({'payload': {'marker': nonce}}));
+  }, allow: const [200, 201]);
+
+  // (1) same scope -> marker present.
+  await _assertBody(
+    'GET cloud-save @ default-app/production (same scope -> present)',
+    group,
+    () => http.get(Uri.parse(url('default-app', 'production')), headers: h),
+    (status, body) => status == 200 && _payloadMarker(body) == nonce,
+    expect: 'marker=$nonce',
+  );
+
+  // (2) different environment -> isolated (absent, or 404).
+  await _assertBody(
+    'GET cloud-save @ default-app/development (other env -> isolated)',
+    group,
+    () => http.get(Uri.parse(url('default-app', 'development')), headers: h),
+    (status, body) => status == 404 || _payloadMarker(body) != nonce,
+    expect: 'marker!=$nonce',
+  );
+
+  // (3) legacy unscoped read (defaults to default-app/development) -> isolated.
+  await _assertBody(
+    'GET cloud-save @ unscoped (legacy default -> isolated)',
+    group,
+    () => http.get(Uri.parse(url(null, null)), headers: h),
+    (status, body) => status == 404 || _payloadMarker(body) != nonce,
+    expect: 'marker!=$nonce',
+  );
+
+  // (4) durability: a fresh read under scope A still returns the marker.
+  await _assertBody(
+    'GET cloud-save @ default-app/production (re-read -> durable)',
+    group,
+    () => http.get(Uri.parse(url('default-app', 'production')), headers: h),
+    (status, body) => status == 200 && _payloadMarker(body) == nonce,
+    expect: 'marker=$nonce (durable)',
+  );
+}
+
+/// Pulls `payload.marker` out of a cloud-save body, tolerating the
+/// `{snapshot:{payload:{...}}}` envelope. Returns null when absent.
+String? _payloadMarker(String body) {
+  try {
+    final d = jsonDecode(body);
+    if (d is! Map) return null;
+    final snap = d['snapshot'];
+    final payload = (snap is Map ? snap['payload'] : null) ?? d['payload'];
+    if (payload is Map && payload['marker'] is String) {
+      return payload['marker'] as String;
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Like [_step] but asserts on the response body via [check] (status, body),
+/// for contract checks that depend on content rather than status alone.
+Future<void> _assertBody(
+  String label,
+  String group,
+  Future<http.Response> Function() send,
+  bool Function(int status, String body) check, {
+  String? expect,
+}) async {
+  print('-- $label --');
+  try {
+    final resp = await send().timeout(const Duration(seconds: 25));
+    final ok = check(resp.statusCode, resp.body);
+    print('   ${ok ? '[PASS]' : '[FAIL]'} -> ${resp.statusCode}'
+        '${expect != null ? '  (expected $expect)' : ''}');
+    final ex = _excerpt(resp.body);
+    if (ex.isNotEmpty) print('   body: $ex');
+    _record(group, label, ok, status: resp.statusCode);
+  } on TimeoutException {
+    print('   [FAIL] TIMEOUT');
+    _record(group, label, false, note: 'timeout');
+  } catch (e) {
+    print('   [FAIL] $e');
+    _record(group, label, false, note: '$e');
+  }
+}
 
 class _Result {
   _Result(this.group, this.label, this.pass, {this.status, this.note});

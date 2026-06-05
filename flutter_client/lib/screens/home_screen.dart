@@ -19,6 +19,12 @@ enum _SaveStatus { idle, saving, saved, error }
 
 class _HomeScreenState extends State<HomeScreen> {
   static const _slotKey = 'flame';
+  // DartStream Dash runs in its own experience scope — deliberately distinct
+  // from the SaaS gaming samples (flame-game/production) so this client's
+  // profile, inventory and cloud-saves are isolated and we verify the
+  // project+environment scoping independently rather than mirroring them.
+  static const _projectId = 'dartstream-dash';
+  static const _environmentId = 'production';
 
   late DartstreamDashGame _game;
   bool _loading = true;
@@ -52,13 +58,25 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _bootstrap() async {
     try {
       final results = await Future.wait([
-        _api.profile(userId: _userId, tenantId: _tenantId),
+        _api.profile(
+          userId: _userId,
+          tenantId: _tenantId,
+          projectId: _projectId,
+          environmentId: _environmentId,
+        ),
         _api.featureFlags(tenantId: _tenantId),
-        _api.inventory(userId: _userId, tenantId: _tenantId),
+        _api.inventory(
+          userId: _userId,
+          tenantId: _tenantId,
+          projectId: _projectId,
+          environmentId: _environmentId,
+        ),
         _api.loadSnapshot(
           userId: _userId,
           tenantId: _tenantId,
           slotKey: _slotKey,
+          projectId: _projectId,
+          environmentId: _environmentId,
         ),
         _api.streamingChannels(tenantId: _tenantId),
       ]);
@@ -154,6 +172,8 @@ class _HomeScreenState extends State<HomeScreen> {
           tenantId: _tenantId,
           slotKey: _slotKey,
           payload: snapshot,
+          projectId: _projectId,
+          environmentId: _environmentId,
         );
         if (mounted) setState(() => _saveStatus = _SaveStatus.saved);
       } catch (_) {
@@ -268,10 +288,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         _panel(
-          title: 'Cloud save',
+          title: 'Cloud save · $_projectId/$_environmentId',
           child: Text(
             switch (_saveStatus) {
-              _SaveStatus.idle => 'Resumed: $_resumeSummary (slot=$_slotKey)',
+              _SaveStatus.idle =>
+                'Resumed: $_resumeSummary (slot=$_slotKey, '
+                    'scope=$_projectId/$_environmentId)',
               _SaveStatus.saving => 'Saving snapshot…',
               _SaveStatus.saved => 'Snapshot saved.',
               _SaveStatus.error => 'Snapshot save FAILED.',
